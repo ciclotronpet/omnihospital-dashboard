@@ -1,0 +1,96 @@
+name: Daily Dashboard Update & Notify
+
+on:
+  schedule:
+    # 10:45 AM Ecuador time (ECT = UTC-5) → 15:45 UTC
+    - cron: '45 15 * * *'
+  workflow_dispatch:   # Allows manual trigger for testing
+
+jobs:
+  update-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Update timestamp in dashboard
+        run: |
+          # Update the last-update timestamp in the HTML
+          TIMESTAMP=$(TZ="America/Guayaquil" date "+%d %b %Y, %H:%M")
+          echo "Updating dashboard timestamp to: $TIMESTAMP"
+
+          # Replace the static timestamp placeholder with current time
+          sed -i "s|id=\"update-time\">—|id=\"update-time\">$TIMESTAMP|g" index.html || true
+          sed -i "s|id=\"update-time\">[^<]*|id=\"update-time\">$TIMESTAMP|g" index.html || true
+
+      - name: Commit updated dashboard
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "GitHub Actions Bot"
+          git add index.html
+          git diff --staged --quiet || git commit -m "🔄 Dashboard actualizado — $(TZ='America/Guayaquil' date '+%d/%m/%Y %H:%M') ECT"
+
+      - name: Push changes
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          branch: main
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: .
+          publish_branch: gh-pages
+          exclude_assets: '.github,scripts,README.md'
+
+      - name: Send email notification
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          username: ${{ secrets.GMAIL_USER }}
+          password: ${{ secrets.GMAIL_APP_PASSWORD }}
+          subject: "📊 Dashboard OmniHospital actualizado — {{ date }}"
+          to: mleon@omnihospital.com.ec
+          from: OmniHospital Dashboard <${{ secrets.GMAIL_USER }}>
+          html_body: |
+            <!DOCTYPE html>
+            <html>
+            <body style="font-family: Arial, sans-serif; background: #f1f5f9; padding: 32px; margin: 0;">
+              <div style="max-width: 520px; margin: 0 auto; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.1);">
+                <div style="background: linear-gradient(135deg, #1e3a8a, #0e7490); padding: 28px 32px;">
+                  <h1 style="color: white; margin: 0; font-size: 1.3rem;">🏥 OmniHospital</h1>
+                  <p style="color: #bae6fd; margin: 6px 0 0; font-size: 0.9rem;">Panel de Control Operativo</p>
+                </div>
+                <div style="padding: 28px 32px;">
+                  <p style="color: #1e293b; font-size: 1rem; margin: 0 0 12px;">¡Buenos días!</p>
+                  <p style="color: #475569; font-size: 0.9rem; line-height: 1.6; margin: 0 0 24px;">
+                    Tu dashboard operativo ha sido actualizado automáticamente. 
+                    Los datos más recientes ya están disponibles.
+                  </p>
+                  <div style="text-align: center; margin-bottom: 24px;">
+                    <a href="https://ciclotronpet.github.io/omnihospital-dashboard/"
+                       style="display: inline-block; background: linear-gradient(135deg, #2563eb, #0891b2); color: white;
+                              padding: 14px 32px; border-radius: 8px; text-decoration: none; 
+                              font-weight: 600; font-size: 0.95rem;">
+                      📊 Ver Dashboard
+                    </a>
+                  </div>
+                  <div style="background: #f8fafc; border-radius: 8px; padding: 16px; font-size: 0.82rem; color: #64748b;">
+                    <strong>Actualización:</strong> Automática diaria a las 10:45 AM (ECT)<br/>
+                    <strong>Repositorio:</strong> github.com/ciclotronpet/omnihospital-dashboard
+                  </div>
+                </div>
+                <div style="background: #f1f5f9; padding: 16px 32px; text-align: center; font-size: 0.75rem; color: #94a3b8;">
+                  OmniHospital Dashboard · Notificación automática
+                </div>
+              </div>
+            </body>
+            </html>
